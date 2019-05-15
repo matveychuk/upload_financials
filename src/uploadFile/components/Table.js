@@ -44,16 +44,17 @@ class TableFromData extends React.Component {
     //2... - choose colunms for predefined columns in regular tables
     currentStep: 0,
     data: this.props.data,
-    columnsList: form_fields[this.props.formType].mandatory.concat(form_fields[this.props.formType].optional),
+    columnsList: this.props.formType === 'custom' ? [] : form_fields[this.props.formType].map(el => el.value),
     currentColumn: 0,
     submitted: false
   }
 
   handleRowClick = (index) => {
     const { currentStep, data } = this.state;
-    if (currentStep > 1) return //break for cases when user chooses columns
+    const { formType } = this.props;
+    if (currentStep > 1) return; //break for cases when user chooses columns
 
-    let dataToModify = [...data]
+    let dataToModify = [...data];
 
     if (currentStep === 0) {
       //to remove all top rows before header
@@ -67,6 +68,9 @@ class TableFromData extends React.Component {
       //to remove empty rows
       dataToModify = dataToModify.filter((el) => el.length)
       this.setState({ firstDataRowIndex: index, currentStep: 2, data: dataToModify });
+      if (formType === 'custom') {
+        this.setState({ tableCleaned: true })
+      }
     };
   }
 
@@ -76,8 +80,27 @@ class TableFromData extends React.Component {
     if (currentStep < 2) return //break for cases when user chooses header and first row with data
 
     let dataToModify = [...data]
-    dataToModify[0][index] = columnsList[currentColumn]
-    this.setState({ currentColumn: this.state.currentColumn + 1, data: dataToModify, skipped: false })
+    dataToModify[0][index] = columnsList[currentColumn].toUpperCase()
+
+    this.setState({ currentColumn: this.state.currentColumn + 1, data: dataToModify })
+
+  }
+
+  cleanupTable = () => {
+    const { data, columnsList } = this.state;
+   
+    //we use some hack for deep cloning
+    let dataToModify = JSON.parse(JSON.stringify(data));
+    data[0].map((columnTitle, i) => {
+      if (!columnsList.includes(columnTitle.toString().toLowerCase())) {
+        //delete in each row the value for not included in the list column
+        const idx = dataToModify[0].indexOf(columnTitle)
+        dataToModify.map(row => {
+          row.splice(idx, 1)
+        })
+      }
+    })
+    this.setState({ data: dataToModify, tableCleaned: true })
 
   }
 
@@ -89,7 +112,7 @@ class TableFromData extends React.Component {
 
   render() {
     const { classes, formType } = this.props;
-    const { currentStep, data, columnsList, currentColumn, submitted, showLoader } = this.state;
+    const { currentStep, data, columnsList, currentColumn, submitted, showLoader, tableCleaned } = this.state;
 
     if (!submitted) return (
       <React.Fragment>
@@ -104,7 +127,7 @@ class TableFromData extends React.Component {
         {currentStep > 1 && currentColumn < columnsList.length &&
           <React.Fragment>
             <p className={classes.button}>{"Please click a column for " + columnsList[currentColumn]}</p>
-            {form_fields[formType].optional.includes(columnsList[currentColumn]) &&
+            {!form_fields[formType][currentColumn].mandatory &&
               <React.Fragment>
                 <p className={classes.button}>This column is optional. You can skip it</p>
                 <Button
@@ -120,7 +143,20 @@ class TableFromData extends React.Component {
           </React.Fragment>
         }
 
-        {currentColumn === columnsList.length &&
+        {!!(columnsList.length && currentColumn === columnsList.length && !tableCleaned) &&
+          <React.Fragment>
+            <p>All columns that are not from regular form fields list will be removed</p>
+            <Button
+              variant="contained"
+              color="primary"
+              className={classes.button}
+              onClick={this.cleanupTable}
+            >
+              Okay
+            </Button>
+          </React.Fragment>
+        }
+        {tableCleaned &&
           <React.Fragment>
             <p>Your data is ready to submit</p>
             <Button

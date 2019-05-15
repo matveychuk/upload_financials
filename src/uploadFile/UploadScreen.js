@@ -18,7 +18,6 @@ class UploadScreen extends React.Component {
 
     reader.onload = (e) => {
       var data = e.target.result;
-      console.log(data);
       var workbook = XLSX.read(data, {
         type: 'binary'
       });
