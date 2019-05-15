@@ -2,7 +2,7 @@ import React from 'react';
 import Button from '@material-ui/core/Button';
 import XLSX from 'xlsx';
 
-import { Table } from './components';
+import { FormTypes, Table } from './components';
 
 class UploadScreen extends React.Component {
 
@@ -13,10 +13,8 @@ class UploadScreen extends React.Component {
   handleFile = (event) => {
     const file = event.target.files[0];
     if (!this.validFileType(file)) console.log('not valid')
-    console.log(file);
 
     const reader = new FileReader();
-
 
     reader.onload = (e) => {
       var data = e.target.result;
@@ -24,20 +22,15 @@ class UploadScreen extends React.Component {
       var workbook = XLSX.read(data, {
         type: 'binary'
       });
-      console.log(workbook);
       var result = {};
       workbook.SheetNames.forEach(function (sheetName) {
         var roa = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
         if (roa.length) result[sheetName] = roa;
       });
-      console.log(result);
-      this.setState({ dataForTable: result })
-
-
+      this.setState({ dataForTable: result.Sheet1 })
     };
 
     reader.readAsBinaryString(file);
-
   }
 
   validFileType = (file) => {
@@ -55,24 +48,43 @@ class UploadScreen extends React.Component {
   }
 
   render() {
-    const { dataForTable } = this.state;
+    const { formType, dataForTable } = this.state;
 
     return (
       <React.Fragment>
-        <Button
-          variant="contained"
-          component="label"
-        >
-          Choose file to upload
-        <input
-            type="file"
-            accept=".xlsx, .xls, .csv"
-            onChange={this.handleFile}
-            style={{ display: "none" }}
-          />
-        </Button>
+        {!formType &&
+          <FormTypes callback={(formType) => this.setState({ formType })} />
+          ||
+          <React.Fragment>
 
-        {dataForTable && <Table data={dataForTable} />}
+            <h3>{formType.toUpperCase()}</h3>
+
+            {!dataForTable &&
+              <Button
+                variant="contained"
+                component="label"
+              >
+                Choose file to upload
+           <input
+                  type="file"
+                  accept=".xlsx, .xls, .csv"
+                  onChange={this.handleFile}
+                  style={{ display: "none" }}
+                />
+              </Button>
+              ||
+              <Table
+                data={dataForTable}
+                formType={formType}
+                regularTable={this.state.formType !== 'custom'}
+                chooseHeader={(rowIndex => this.chooseHeader(rowIndex))}
+              />
+            }
+          </React.Fragment>
+        }
+
+
+
       </React.Fragment>
     )
   }
