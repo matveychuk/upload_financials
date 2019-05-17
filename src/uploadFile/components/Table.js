@@ -44,78 +44,140 @@ class TableFromData extends React.Component {
     //2... - choose colunms for predefined columns in regular tables
     currentStep: 0,
     data: this.props.data,
+    dataBySteps: [this.props.data],
     columnsList: this.props.formType === 'custom' ? [] : form_fields[this.props.formType].map(el => el.value),
     currentColumn: 0,
     submitted: false
   }
 
   handleRowClick = (index) => {
-    const { currentStep, data } = this.state;
+    const { currentStep, data, dataBySteps } = this.state;
     const { formType } = this.props;
     if (currentStep > 1) return; //break for cases when user chooses columns
 
     let dataToModify = [...data];
+    let archive = JSON.parse(JSON.stringify(dataBySteps));
 
     if (currentStep === 0) {
       //to remove all top rows before header
       dataToModify.splice(0, index);
-      this.setState({ headerRowIndex: index, currentStep: 1, data: dataToModify });
+      archive.push(dataToModify);
+      this.setState({
+        currentStep: 1,
+        data: dataToModify,
+        dataBySteps: archive
+      });
       return;
     };
+
     if (currentStep === 1) {
       //to remove all rows between header and actual data
       dataToModify.splice(1, index - 1);
+      archive.push(dataToModify);
+
       //to remove empty rows
-      dataToModify = dataToModify.filter((el) => el.length)
-      this.setState({ firstDataRowIndex: index, currentStep: 2, data: dataToModify });
+      dataToModify = dataToModify.filter((el) => el.length);
+      this.setState({
+        currentStep: 2,
+        data: dataToModify,
+        dataBySteps: archive
+      });
       if (formType === 'custom') {
-        this.setState({ tableCleaned: true })
+        this.setState({ tableCleaned: true });
       }
     };
   }
 
   handleColumnClick = (index) => {
-    const { currentStep, currentColumn, data, columnsList } = this.state;
+    const { currentStep, currentColumn, data, columnsList, dataBySteps } = this.state;
 
-    if (currentStep < 2) return //break for cases when user chooses header and first row with data
+    if (currentStep < 2) return; //break for cases when user chooses header and first row with data
+    if (currentColumn > columnsList.length) return; //break for cases when user's alreade choosen all fields/columns
 
-    let dataToModify = [...data]
-    dataToModify[0][index] = columnsList[currentColumn].toUpperCase()
+    let dataToModify = [...data];
+    let archive = JSON.parse(JSON.stringify(dataBySteps));
 
-    this.setState({ currentColumn: this.state.currentColumn + 1, data: dataToModify })
 
+    dataToModify[0][index] = columnsList[currentColumn].toUpperCase();
+    archive.push(dataToModify);
+
+    this.setState({
+      currentColumn: this.state.currentColumn + 1,
+      data: dataToModify,
+      currentStep: this.state.currentStep + 1,
+      dataBySteps: archive
+    }, () => this.checkFields());
   }
+
+  checkFields = () => {
+    const { currentColumn, data, columnsList } = this.state;
+    if (currentColumn !== columnsList.length) return;
+
+    //check if all mandatory fields are set
+    let allSet = true;
+    columnsList.map(field => {
+      if (field.mandatory && !data[0].includes(field.value)) allSet = false;
+    })
+    if (!allSet) {
+      this.setState({ error: 'Not all mandatory fields are set' });
+      return;
+    }
+
+    //check if header row contains duplicates
+    data[0] = data[0].map(el => el.toString().toUpperCase());
+    if (new Set(data[0]).size !== data[0].length) this.setState({ error: 'Header contains duplicate column names' });
+  }
+
 
   cleanupTable = () => {
     const { data, columnsList } = this.state;
-   
+
     //we use some hack for deep cloning
     let dataToModify = JSON.parse(JSON.stringify(data));
     data[0].map((columnTitle, i) => {
       if (!columnsList.includes(columnTitle.toString().toLowerCase())) {
         //delete in each row the value for not included in the list column
-        const idx = dataToModify[0].indexOf(columnTitle)
+        const idx = dataToModify[0].indexOf(columnTitle);
         dataToModify.map(row => {
-          row.splice(idx, 1)
+          row.splice(idx, 1);
         })
       }
     })
-    this.setState({ data: dataToModify, tableCleaned: true })
+    this.setState({ data: dataToModify, tableCleaned: true });
 
   }
 
-  sendData = () => {
+  handlePrevStep = () => {
+    const { currentStep, dataBySteps, currentColumn } = this.state;
+    this.setState({
+      currentStep: currentStep - 1,
+      data: dataBySteps[currentStep - 1]
+    });
+    if (currentColumn > 0) this.setState({ currentColumn: currentColumn - 1 });
+  }
 
-    this.setState({ submitted: true, showLoader: true })
-    setTimeout(() => this.setState({ showLoader: false }), 1000)
+  sendData = () => {
+    //showLoader is used to simulate delay for server response
+    this.setState({ submitted: true, showLoader: true });
+    setTimeout(() => this.setState({ showLoader: false }), 1000);
   }
 
   render() {
     const { classes, formType } = this.props;
-    const { currentStep, data, columnsList, currentColumn, submitted, showLoader, tableCleaned } = this.state;
+    const { currentStep, data, columnsList, currentColumn, submitted, showLoader, tableCleaned, error } = this.state;
 
     if (!submitted) return (
       <React.Fragment>
+        {!!currentStep &&
+          <Button
+            variant="contained"
+            component="label"
+            className={classes.button}
+            onClick={this.handlePrevStep}
+          >
+            Prev Step
+          </Button>
+        }
         {currentStep === 0 &&
           <p className={classes.button}>Please click a row with headers</p>
         }
@@ -134,7 +196,7 @@ class TableFromData extends React.Component {
                   variant="contained"
                   component="label"
                   className={classes.button}
-                  onClick={() => this.setState({ currentColumn: this.state.currentColumn + 1 })}
+                  onClick={() => this.setState({ currentColumn: this.state.currentColumn + 1, currentStep: this.state.currentStep + 1 })}
                 >
                   Skip
                 </Button>
@@ -143,7 +205,11 @@ class TableFromData extends React.Component {
           </React.Fragment>
         }
 
-        {!!(columnsList.length && currentColumn === columnsList.length && !tableCleaned) &&
+        {error && <p style={{ color: 'red' }}>
+          {error}
+        </p>}
+
+        {!!(columnsList.length && currentColumn === columnsList.length && !tableCleaned && !error) &&
           <React.Fragment>
             <p>All columns that are not from regular form fields list will be removed</p>
             <Button
@@ -156,6 +222,7 @@ class TableFromData extends React.Component {
             </Button>
           </React.Fragment>
         }
+        
         {tableCleaned &&
           <React.Fragment>
             <p>Your data is ready to submit</p>
